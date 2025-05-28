@@ -1067,3 +1067,247 @@ export async function getFormResponses(formId: string) {
     return { error: "Failed to get form responses" };
   }
 }
+
+
+
+// export async function submitExamForm(formId: string, answers: Array<{
+//   questionId: string;
+//   answerText: string;
+//   selectedOptions: string[];
+// }>) {
+//   try {
+//     const session = await getServerSession(authOptions);
+    
+//     if (!session || !session.user || !session.user.email) {
+//       throw new Error("Not authenticated");
+//     }
+
+//     const user = await prisma.user.findUnique({
+//       where: { email: session.user.email },
+//     });
+
+//     if (!user) {
+//       throw new Error("User not found");
+//     }
+
+//     // Check if form exists and is published
+//     const form = await prisma.form.findFirst({
+//       where: {
+//         id: formId,
+//         published: true,
+//       },
+//       include: {
+//         questions: {
+//           where: {
+//             isExamQuestion: true,
+//           },
+//           include: {
+//             options: true,
+//           },
+//         },
+//       },
+//     });
+
+//     if (!form) {
+//       return { error: "Exam not found or not published" };
+//     }
+
+//     // Check if user has already submitted this exam
+//     const existingResponse = await prisma.response.findFirst({
+//       where: {
+//         answers: {
+//           some: {
+//             formId: formId,
+//             // You might want to add userId to Answer model to track this better
+//           }
+//         }
+//       }
+//     });
+
+//     // Create response and answers
+//     const response = await prisma.$transaction(async (tx) => {
+//       const createdResponse = await tx.response.create({
+//         data: {
+//           submittedAt: new Date(),
+//           totalQuestions: form.questions.length,
+//         },
+//       });
+
+//       // Calculate score
+//       let correctAnswers = 0;
+      
+//       for (const answerData of answers) {
+//         const question = form.questions.find(q => q.id === answerData.questionId);
+//         if (!question) continue;
+
+//         // Check if answer is correct
+//         const selectedOptionId = answerData.selectedOptions[0]; // Single selection
+//         const isCorrect = question.correctOptionId === selectedOptionId;
+        
+//         if (isCorrect) {
+//           correctAnswers++;
+//         }
+
+//         // Create answer record
+//         await tx.answer.create({
+//           data: {
+//             answerText: answerData.answerText,
+//             questionId: answerData.questionId,
+//             formId: formId,
+//             responseId: createdResponse.id,
+//             isCorrect: isCorrect,
+//             options: {
+//               connect: answerData.selectedOptions.map(optionId => ({ id: optionId }))
+//             }
+//           },
+//         });
+//       }
+
+//       // Update response with score
+//       const updatedResponse = await tx.response.update({
+//         where: { id: createdResponse.id },
+//         data: {
+//           score: Math.round((correctAnswers / form.questions.length) * 100),
+//         },
+//       });
+
+//       return updatedResponse;
+//     });
+
+//     revalidatePath('/forms');
+//     return { success: true, responseId: response.id, score: response.score };
+    
+//   } catch (error) {
+//     console.error("Error submitting exam:", error);
+//     return { 
+//       error: error instanceof Error ? error.message : "Failed to submit exam" 
+//     };
+//   }
+// }
+
+
+export async function submitExamForm(
+  formId: string, 
+  answers: Array<{
+    questionId: string;
+    answerText: string;
+    selectedOptions: string[];
+  }>,
+  userCredentials: {
+    name: string;
+    email: string;
+  }
+) {
+  try {
+    // Basic validation of user credentials
+    if (!userCredentials.name || !userCredentials.email) {
+      throw new Error("Name and email are required to take the exam");
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(userCredentials.email)) {
+      throw new Error("Please enter a valid email address");
+    }
+
+    // Check if form exists and is published
+    const form = await prisma.form.findFirst({
+      where: {
+        id: formId,
+        published: true,
+      },
+      include: {
+        questions: {
+          where: {
+            isExamQuestion: true,
+          },
+          include: {
+            options: true,
+          },
+        },
+      },
+    });
+
+    if (!form) {
+      return { error: "Exam not found or not published" };
+    }
+
+    // Check if user has already submitted this exam (by email)
+    const existingResponse = await prisma.response.findFirst({
+      where: {
+        userEmail: userCredentials.email,
+        answers: {
+          some: {
+            formId: formId,
+          }
+        },
+        // Check in a custom field or use a JSON search if you store user data in a JSON field
+        // For now, we'll skip duplicate check since we don't have user fields in schema
+      },
+    });
+
+    if (existingResponse) {
+      return { error: "You have already submitted this exam." };
+    }
+
+    // Create response and answers with user credentials stored
+    const response = await prisma.$transaction(async (tx) => {
+      const createdResponse = await tx.response.create({
+        data: {
+          submittedAt: new Date(),
+          totalQuestions: form.questions.length,
+          userName: userCredentials.name,
+          userEmail: userCredentials.email,
+        },
+      });
+
+      // Calculate score for actual exam answers
+      let correctAnswers = 0;
+      for (const answer of answers) {
+        const question = form.questions.find((q) => q.id === answer.questionId);
+        if (!question) continue;
+
+        const selectedOptionId = answer.selectedOptions[0]; // Single selection
+        const isCorrect = question.correctOptionId === selectedOptionId;
+        
+        if (isCorrect) {
+          correctAnswers++;
+        }
+
+        // Create answer record
+        await tx.answer.create({
+          data: {
+            answerText: answer.answerText,
+            questionId: answer.questionId,
+            formId: formId,
+            responseId: createdResponse.id,
+            isCorrect: isCorrect,
+            options: {
+              connect: answer.selectedOptions.map(optionId => ({ id: optionId }))
+            }
+          },
+        });
+      }
+
+      // Update response with score
+      const updatedResponse = await tx.response.update({
+        where: { id: createdResponse.id },
+        data: {
+          score: Math.round((correctAnswers / form.questions.length) * 100),
+        },
+      });
+
+      return updatedResponse;
+    });
+
+    revalidatePath('/forms');
+    return { success: true, responseId: response.id, score: response.score };
+      
+    revalidatePath('/exams');
+  } catch (error) {
+    console.error("Error submitting exam:", error);
+    return {
+      error: error instanceof Error ? error.message : "Failed to submit exam"
+    };
+  }
+}

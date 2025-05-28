@@ -126,7 +126,7 @@ export default function ExamForm({
                 className="mt-8"
                 onClick={async () => {
                   await navigator.clipboard.writeText(
-                    `${host}/exam/${formId}`
+                    `${host}/forms/viewexam/${formId}`
                   );
                   toast({
                     title: "Exam link successfully copied",
