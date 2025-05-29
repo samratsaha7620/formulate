@@ -1,5 +1,7 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 excelidarw link : https://excalidraw.com/#room=04c33a4ec6f51f6d8f2d,blutQMgTYTEuMoa4g8zkJA
+
+in this application user login/signup and then can create multiple forms. forms of two types(normal forms to get normal information and exam forms to conduct exams online).normal forms have three types of questions text, multiple choice questons(only one option to be selected) and checkbox(multiple options can be selected). in exam forms there are 4 options and only one option is correct.after creating a form(user can update the form) user can publish a form and can generate a public link which can be shared to anyone. someone who have access to that link can go to that link. there before filling the form they have to submit their name and email id and then they can fill up the form(normal/exam) type form.if the user again try to visit that link with that same email then he/she can see the responses and socres(in case of exam type forms). on the user side who created the form can see all the responses for a particular form (for both types) and also have a feature to generate an excel file of that response.user can anytime ubpublish the form. thennoone can fillup that form with that link.
 ## Getting Started
 
 First, run the development server:
